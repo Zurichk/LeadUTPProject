@@ -21,4 +21,15 @@ build/
 dist/
 *.egg-info/
 
+# Cobertura / caché de herramientas
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+
 docs/
+requirements-dev.txt
+infra/setup-cloud-shell.sh
+infra/storage-account.bicep

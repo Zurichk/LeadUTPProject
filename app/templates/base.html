@@ -1,0 +1,42 @@
+{#
+  Plantilla base de LecturaFácil.
+  Expone el idioma actual, el traductor `t` y el catálogo `i18n` para el JS.
+#}<!DOCTYPE html>
+<html lang="{{ language }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#7c4dff" />
+    <meta name="description" content="{{ t('app.tagline') }}" />
+    <title>{{ app_name }} · {{ t('app.tagline') }}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📚</text></svg>" />
+    <link rel="stylesheet" href="/static/css/kids.css?v={{ version }}" />
+  </head>
+  <body class="app-body">
+    {% block content %}{% endblock %}
+
+    <canvas id="confetti" class="confetti-canvas" aria-hidden="true"></canvas>
+
+    <script>
+      window.LECTURA = {
+        version: "{{ version }}",
+        language: "{{ language }}",
+        supportedLanguages: {{ supported_languages | tojson }},
+        i18n: {{ i18n | tojson }},
+        avatars: {{ avatars | tojson }},
+        profiles: {{ profiles | tojson }},
+        defaultMaxWords: {{ default_max_words }},
+        maxUploadMb: {{ max_upload_mb }},
+        demoMode: {{ demo_mode | tojson }},
+        speechBackend: {{ speech_backend | tojson }},
+        letterCase: {{ letter_case | tojson }},
+        translationEnabled: {{ translation_enabled | tojson }}
+      };
+    </script>
+    <script src="/static/js/recorder.js?v={{ version }}"></script>
+    <script src="/static/js/app.js?v={{ version }}"></script>
+  </body>
+</html>

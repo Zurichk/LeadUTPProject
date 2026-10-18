@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="app-header">
+  <div class="brand">
+    <span class="brand__logo" aria-hidden="true">📚</span>
+    <div>
+      <h1 class="brand__title">{{ app_name }}</h1>
+      <p class="brand__tagline">{{ t("app.tagline") }}</p>
+    </div>
+  </div>
+
+  <div class="header-actions">
+    <div
+      class="language-switch"
+      role="group"
+      aria-label="{{ t('language.switch') }}"
+    >
+      {% for code in supported_languages %}
+        <button
+          type="button"
+          class="language-switch__button {% if code == language %}is-active{% endif %}"
+          data-language="{{ code }}"
+          aria-pressed="{{ 'true' if code == language else 'false' }}"
+        >
+          {{ t("language." ~ code) }}
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+</header>
+
+<main class="app-main">
+  <section class="panel profiles" aria-labelledby="profiles-title">
+    <h2 class="panel__title" id="profiles-title">
+      <span aria-hidden="true">🧒</span> {{ t("profile.title") }}
+    </h2>
+    <div class="profiles__list" id="profile-list" role="list">
+      {# Los perfiles se renderizan en el cliente con los datos de LECTURA. #}
+    </div>
+    <button type="button" class="btn btn--ghost" id="add-profile-button">
+      <span aria-hidden="true">➕</span> {{ t("profile.add") }}
+    </button>
+  </section>
+
+  <section class="panel upload" aria-labelledby="upload-title">
+    <h2 class="panel__title" id="upload-title">
+      <span aria-hidden="true">📸</span> {{ t("upload.title") }}
+    </h2>
+    <p class="panel__hint">{{ t("upload.hint") }}</p>
+
+    <label class="dropzone" id="dropzone" for="file-input">
+      <input
+        type="file"
+        id="file-input"
+        accept="image/*"
+        capture="environment"
+        class="dropzone__input"
+      />
+      <span class="dropzone__icon" aria-hidden="true">🖼️</span>
+      <span class="dropzone__title">{{ t("upload.button") }}</span>
+    </label>
+
+    <p class="upload__status" id="upload-status" role="status" aria-live="polite"></p>
+    <img id="sheet-preview" class="upload__preview" alt="" hidden />
+  </section>
+
+  <section class="panel words" aria-labelledby="words-title">
+    <div class="words__header">
+      <h2 class="panel__title" id="words-title">
+        <span aria-hidden="true">✨</span> {{ t("sheet.words") }}
+      </h2>
+      <div
+        class="case-switch"
+        role="group"
+        aria-label="{{ t('case.label') }}"
+        id="case-switch"
+      >
+        {% for mode in ("upper", "lower", "both") %}
+          <button
+            type="button"
+            class="case-switch__button"
+            data-case="{{ mode }}"
+          >
+            {{ t("case." ~ mode) }}
+          </button>
+        {% endfor %}
+      </div>
+      <div class="words__progress" id="words-progress" aria-live="polite"></div>
+      <button type="button" class="btn btn--ghost" id="translate-button" hidden>
+        <span aria-hidden="true">🌍</span> <span id="translate-label"></span>
+      </button>
+      <button type="button" class="btn btn--ghost" id="reset-button" hidden>
+        <span aria-hidden="true">🔄</span> {{ t("upload.another") }}
+      </button>
+    </div>
+
+    <div class="words__grid" id="words-grid">
+      <p class="words__empty" id="words-empty">{{ t("sheet.empty") }}</p>
+    </div>
+  </section>
+</main>
+
+<div
+  class="modal"
+  id="profile-modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="profile-modal-title"
+  hidden
+>
+  <div class="modal__card">
+    <h2 class="modal__title" id="profile-modal-title">{{ t("profile.add") }}</h2>
+    <label class="modal__label" for="profile-name">{{ t("profile.name") }}</label>
+    <input
+      type="text"
+      id="profile-name"
+      class="modal__input"
+      maxlength="24"
+      autocomplete="off"
+      placeholder="{{ t('profile.name_placeholder') }}"
+    />
+    <div class="modal__avatars" id="profile-avatars" role="radiogroup">
+      {# Los avatares se inyectan desde el catálogo de la aplicación. #}
+    </div>
+    <div class="modal__actions">
+      <button type="button" class="btn btn--ghost" id="profile-cancel">
+        {{ t("profile.cancel") }}
+      </button>
+      <button type="button" class="btn btn--primary" id="profile-save">
+        {{ t("profile.save") }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="alert" hidden></div>
+{% endblock %}
