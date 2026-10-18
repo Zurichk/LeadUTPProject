@@ -1,0 +1,24 @@
+﻿# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Python cache / compilados
+__pycache__/
+*.py[cod]
+*.class
+
+# Variables de entorno / Secretos
+.env
+*.local
+
+# Visual Studio Code / IDEs
+.vscode/
+.idea/
+
+# Distribución / Builds
+build/
+dist/
+*.egg-info/
+
+docs/
