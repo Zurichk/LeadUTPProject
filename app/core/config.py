@@ -68,6 +68,10 @@ class Settings(BaseSettings):
         speech_backend: Motor de voz: ``auto`` (intenta Azure y cae al
             navegador), ``browser`` (solo Web Speech API) o ``azure``.
         speech_voices: Voz neuronal por idioma.
+        foundry_audio_enabled: Indica si hay un deployment de voz por modelo
+            (gpt-4o-audio-preview). Si está activo tiene prioridad sobre la voz
+            del navegador.
+        foundry_audio_deployment: Nombre del deployment del modelo de audio.
         max_ocr_wait_seconds: Tiempo máximo de espera del análisis asíncrono de
             Document Intelligence.
         tts_cache_size: Número máximo de audios sintetizados en memoria.
@@ -137,17 +141,22 @@ class Settings(BaseSettings):
     # Traducción opcional con un modelo de Azure AI Foundry.
     translation_enabled: bool = False
     foundry_endpoint: str | None = None
-    foundry_deployment: str = "Phi-4-mini-instruct"
+    foundry_deployment: str = "gpt-4o-mini"
     foundry_api_key: str | None = None
     foundry_timeout_seconds: float = Field(default=12.0, gt=0)
     translation_cache_size: int = Field(default=512, ge=0)
 
-    speech_region: str = "westeurope"
+    speech_region: str = "swedencentral"
     speech_key: str | None = None
     speech_backend: SpeechBackend = "auto"
     speech_voices: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_VOICES))
     max_ocr_wait_seconds: float = Field(default=60.0, gt=0)
     tts_cache_size: int = Field(default=256, ge=0)
+
+    # Voz por modelo multimodal (gpt-4o-audio-preview) en lugar de un recurso
+    # de Speech. Requiere foundry_endpoint y cuota de Marketplace.
+    foundry_audio_enabled: bool = False
+    foundry_audio_deployment: str = "gpt-audio-1-5"
 
     @computed_field  # type: ignore[prop-decorator]
     @property

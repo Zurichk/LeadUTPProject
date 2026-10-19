@@ -1,0 +1,41 @@
+# Todo lo que no debe entrar en la imagen.
+# Incluir el entorno virtual multiplicaría el tamaño y puede meter código
+# compilado para otra versión de Python.
+
+.venv/
+venv/
+env/
+
+# Secretos: la configuración se inyecta por variables de entorno o App Settings.
+.env
+.env.*
+
+# Pruebas y documentación
+tests/
+docs/
+test/
+dist/
+scripts/
+
+# Control de versiones y herramientas
+.git/
+.gitignore
+.github/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+*.egg-info/
+
+# Editores
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+desktop.ini

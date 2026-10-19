@@ -29,7 +29,7 @@ palabra con:
 | Traducción | Diccionario es⇄ca propio + modelo de Foundry como respaldo |
 | Almacenamiento | Azure Blob Storage (contenedor `fichas-lectura`) |
 | Seguridad | Managed Identity (DefaultAzureCredential) + Azure Key Vault |
-| IaC | Bicep (`infra/main.bicep`) + `infra/setup-cloud-shell.sh` |
+| IaC | `infra/main.bicep` (declarativo) + `infra/setup-cloud-shell.sh` (imperativo) |
 
 El reconocimiento de voz usa primero la **Web Speech API del navegador**
 (instantáneo y sin coste) y cae a **Azure AI Speech** cuando el navegador no la
@@ -53,7 +53,9 @@ en una app donde se está aprendiendo a leer.
 │   ├── TAREAS.md                # Lista de tareas y estado
 │   └── python-instructions.md   # Convenciones del repositorio
 ├── infra/
-│   └── main.bicep               # Infraestructura como código
+│   ├── main.bicep                # Infraestructura declarativa (todo desde cero)
+│   ├── setup-cloud-shell.sh      # Equivalente imperativo, idempotente
+│   └── README.md                 # Cuándo usar cada uno
 ├── app/
 │   ├── main.py                  # Fábrica FastAPI + composición
 │   ├── container.py             # Punto de composición de servicios
@@ -169,13 +171,18 @@ mypy app tests
 ## 🚀 Despliegue en Azure
 
 1. Sigue la guía completa: [`docs/guiadeservicios.md`](docs/guiadeservicios.md).
-2. O aprovisiona el resto de recursos con Bicep (reutiliza tu cuenta de
-   almacenamiento existente `leadutpproject`):
+2. Crea la infraestructura. Las dos opciones son equivalentes:
 
-```powershell
-az deployment group create -g LeadUTPProject `
-  --template-file infra/main.bicep `
-  --parameters blobAccountName="leadutpproject" uniqueSuffix="<sfx>" location="westus2" speechRegion="westus2"
+```bash
+# A) Declarativo, crea TODO desde cero (grupo de recursos incluido)
+az deployment sub create --location westeurope \
+  --template-file infra/main.bicep --parameters uniqueSuffix="<sfx>"
+
+# B) Imperativo, para continuar sobre tu entorno existente
+bash setup-cloud-shell.sh
+DEPLOY_ZIP=dist.zip bash setup-cloud-shell.sh   # con el código incluido
 ```
+
+Genera el ZIP antes con `pwsh scripts/empaquetar.ps1`. Más detalle en [`infra/README.md`](infra/README.md).
 
 3. Estado de las tareas: [`docs/TAREAS.md`](docs/TAREAS.md).

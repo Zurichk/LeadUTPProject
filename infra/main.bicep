@@ -1,226 +1,241 @@
 /*
-  LecturaFácil — infraestructura Azure.
+  LecturaFácil — punto de entrada de la infraestructura.
 
-  Usa una cuenta de Blob Storage YA existente (creada manualmente en el
-  portal) y crea el resto de recursos: Azure AI Vision (OCR), Azure AI Speech
-  (voz), Key Vault, App Service con Managed Identity y los roles RBAC.
+  Ámbito: suscripción. Solo se declara aquí el grupo de recursos; todo lo demás
+  vive en `services.bicep`, que se invoca como módulo con `scope`. Esto es
+  obligatorio: en un archivo con targetScope='subscription' no se pueden
+  declarar recursos de grupo de recursos directamente (error BCP139).
 
-  IMPORTANTE: no crea la cuenta de almacenamiento; solo añade el contenedor
-  `fichas-lectura` a la cuenta indicada en el parámetro `blobAccountName`.
-  Para crear una cuenta desde cero, ver infra/storage-account.bicep.
+  Crea TODO lo que necesita la aplicación desde cero:
+
+    - Grupo de recursos
+    - Managed Identity + 3 roles RBAC
+    - Blob Storage + contenedor de fichas
+    - Azure AI Vision (OCR) y Azure AI Speech (opcional)
+    - Key Vault
+    - App Service Plan + Web App Linux con su configuración (LECTURA_*)
 
   Uso:
-    az deployment group create -g LeadUTPProject \
-      --template-file infra/main.bicep \
-      --parameters blobAccountName="leadutpproject" location="westus2"
+
+    Despliegue completo recomendado:
+
+      az deployment sub create \
+        --location westeurope \
+        --template-file main.bicep \
+        --parameters uniqueSuffix="mika03"
 */
 
-@description('Nombre de la cuenta de Blob Storage existente donde se guardan las fichas.')
-param blobAccountName string
+targetScope = 'subscription'
 
-@description('Nombre base de los recursos de IA.')
-param projectName string = 'lecturafacil'
+// ============================================================================
+// Parámetros
+// ============================================================================
 
-@description('Sufijo corto y único para los nombres globales (recursos de IA).')
-param uniqueSuffix string
+@description('Nombre del grupo de recursos.')
+param resourceGroupName string = 'LeadUTPProject'
 
-@description('Región de los recursos nuevos (App Service y Key Vault).')
+@description('Crear el grupo de recursos. Ponlo en false si YA existe; si no existe, el despliegue falla con ResourceGroupNotFound.')
+param createResourceGroup bool = true
+
+@description('Región del grupo de recursos.')
 param location string = 'swedencentral'
 
-@description('Región de Azure AI Speech.')
-param speechRegion string = 'westus2'
+@description('Sufijo corto y único para los nombres globales de Azure AI Services.')
+param uniqueSuffix string = 'mika01'
 
-@description('SKU del plan de App Service. F1 es el único disponible en Azure for Students.')
+@description('Región del almacenamiento, del Key Vault y de Azure AI Vision.')
+param resourceLocation string = 'swedencentral'
+
+@description('Región del App Service.')
+param appServiceLocation string = 'swedencentral'
+
+@description('SKU del plan de App Service.')
 param appServicePlanSku string = 'F1'
+
+@description('Región de Azure AI Speech (solo si enableAzureSpeech o enableSpeechServices es true).')
+param speechLocation string = 'swedencentral'
 
 @description('Runtime de Python del App Service.')
 param pythonVersion string = '3.12'
 
+@description('Nombre global de la cuenta de Blob Storage (3-24 caracteres, minúsculas y números).')
+param storageAccountName string = 'leadutpproject'
+
 @description('Nombre del contenedor donde se guardan las fichas.')
 param containerName string = 'fichas-lectura'
 
-var suffix = toLower(uniqueSuffix)
-var visionName = 'cog-${projectName}-vision-${suffix}'
-var speechName = 'cog-${projectName}-speech-${suffix}'
-var keyVaultName = 'kv-${projectName}-${suffix}'
-var appName = 'app-${projectName}-${suffix}'
-var planName = 'plan-${projectName}-${suffix}'
-var managedIdentityName = 'id-${projectName}-${suffix}'
+@description('SKU del almacenamiento. Standard_RAGRS replica en dos regiones.')
+@allowed(['Standard_LRS', 'Standard_GRS', 'Standard_RAGRS', 'Standard_ZRS'])
+param storageSkuName string = 'Standard_RAGRS'
 
-/* ------------------------------------------------------------ almacenamiento */
+@description('Crear la cuenta de almacenamiento. Ponlo en false si ya existe.')
+param deployStorage bool = true
 
-@description('Cuenta de Blob Storage existente.')
-resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
-  name: blobAccountName
-}
+@description('Asignar los roles RBAC. Ponlo en false si ya existen.')
+param assignRoleAssignments bool = true
 
-@description('Contenedor privado de fichas (no se crea la cuenta, solo este hijo).')
-resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
-  parent: storage
-  name: 'blobServices/default/${containerName}'
-  properties: {
-    publicAccess: 'None'
-  }
-}
+@description('Crear Azure AI Speech. En Azure for Students devuelve InvalidApiSetId porque se factura por Marketplace.')
+param enableAzureSpeech bool = false
 
-/* ------------------------------------------------------------------ identidad */
+@description('Crear un recurso de voz con kind SpeechServices (la variante que Foundry muestra en el portal).')
+param enableSpeechServices bool = false
 
-@description('Identidad administrada que usa la aplicación para acceder a Azure.')
-resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: managedIdentityName
+@description('Desplegar un modelo de voz multimodal (gpt-audio-1.5) en lugar de un recurso de Speech.')
+param enableAudioModel bool = false
+
+@description('Nombre del deployment del modelo de audio.')
+param audioModelDeployment string = 'gpt-audio-1-5'
+
+@description('Modelo de voz. gpt-audio-1.5 (GA, voz a voz), gpt-audio o gpt-realtime-2.1 (tiempo real).')
+param audioModelName string = 'gpt-audio-1.5'
+
+@description('Versión del modelo de audio. La de gpt-audio-1.5 es 2026-02-23.')
+param audioModelVersion string = '2026-02-23'
+
+@description('Capacidad del deployment de audio en miles de tokens por minuto. Azure exige 10 como mínimo para GlobalStandard.')
+param audioModelCapacity int = 10
+
+@description('Crear el despliegue del modelo de traducción en Foundry.')
+param deployTranslationModel bool = true
+
+@description('Nombre del modelo en Foundry. gpt-5-mini con GlobalStandard es la opción activa asignable.')
+param foundryModelName string = 'gpt-5-mini'
+
+@description('Editor del modelo de traducción. Los modelos gpt-* son de OpenAI y los Phi-* de Microsoft.')
+@allowed(['Microsoft', 'OpenAI'])
+param foundryModelFormat string = 'OpenAI'
+
+@description('Versión del modelo en Foundry.')
+param foundryModelVersion string = '2025-08-07'
+
+@description('Tipo de despliegue del modelo de traducción.')
+@allowed(['GlobalStandard', 'Standard', 'DataZoneStandard'])
+param foundryModelSku string = 'GlobalStandard'
+
+@description('Unidades de capacidad (TPM) del despliegue del modelo. El mínimo aceptado por Azure es 1.')
+param foundryModelCapacity int = 1
+
+@description('Motor de voz: browser usa la Web Speech API, azure usa Azure AI Speech.')
+@allowed(['browser', 'azure'])
+param speechBackend string = 'browser'
+
+@description('Activar la traducción con un modelo de Foundry.')
+param enableTranslation bool = true
+
+@description('Nombre del deployment del modelo de traducción en Foundry.')
+param foundryDeployment string = 'gpt-5-mini'
+
+@description('Modo de las letras en las tarjetas.')
+@allowed(['upper', 'lower', 'both'])
+param letterCase string = 'both'
+
+@description('Similitud mínima (0-1) para dar por buena una pronunciación.')
+param matchThreshold string = '0.8'
+
+@description('Número máximo de palabras por ficha.')
+param maxWords string = '12'
+
+@description('Tamaño máximo de la foto de la ficha, en MB.')
+param maxUploadMb string = '12'
+
+@description('Idioma por defecto de la interfaz: es o ca.')
+@allowed(['es', 'ca'])
+param defaultLanguage string = 'es'
+
+@description('Ruta de salud que Azure usa para mantener el sitio despierto.')
+param healthCheckPath string = '/health'
+
+// ============================================================================
+// Grupo de recursos
+// ============================================================================
+
+resource rg 'Microsoft.Resources/resourceGroups@2024-11-01' = if (createResourceGroup) {
+  name: resourceGroupName
   location: location
-}
-
-/* -------------------------------------------------------- servicios de IA (IA) */
-
-@description('Azure AI Vision: OCR de las fotos de las fichas.')
-resource vision 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
-  name: visionName
-  location: location
-  kind: 'AIServices'
-  sku: { name: 'S0' }
-  properties: {
-    customSubDomainName: visionName
-    publicNetworkAccess: 'Enabled'
+  tags: {
+    proyecto: 'lectura-facil'
+    uso: 'lectoescritura-infantil'
   }
 }
 
-@description('Azure AI Speech: síntesis de voz y reconocimiento.')
-resource speech 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
-  name: speechName
-  location: location
-  kind: 'Speech'
-  sku: { name: 'S0' }
-  properties: {
-    customSubDomainName: speechName
-    publicNetworkAccess: 'Enabled'
+// ============================================================================
+// Módulo de recursos (ámbito: grupo de recursos)
+// ============================================================================
+
+module services 'services.bicep' = {
+  name: 'lecturafacil-servicios'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    uniqueSuffix: uniqueSuffix
+    location: resourceLocation
+    appServiceLocation: appServiceLocation
+    appServicePlanSku: appServicePlanSku
+    speechLocation: speechLocation
+    pythonVersion: pythonVersion
+    storageAccountName: storageAccountName
+    containerName: containerName
+    storageSkuName: storageSkuName
+    deployStorage: deployStorage
+    assignRoleAssignments: assignRoleAssignments
+    enableAzureSpeech: enableAzureSpeech
+    enableSpeechServices: enableSpeechServices
+    enableAudioModel: enableAudioModel
+    audioModelDeployment: audioModelDeployment
+    audioModelName: audioModelName
+    audioModelVersion: audioModelVersion
+    audioModelCapacity: audioModelCapacity
+    speechBackend: speechBackend
+    enableTranslation: enableTranslation
+    deployTranslationModel: enableTranslation && deployTranslationModel
+    foundryModelName: foundryModelName
+    foundryModelFormat: foundryModelFormat
+    foundryModelVersion: foundryModelVersion
+    foundryModelSku: foundryModelSku
+    foundryModelCapacity: foundryModelCapacity
+    foundryDeployment: foundryDeployment
+    letterCase: letterCase
+    matchThreshold: matchThreshold
+    maxWords: maxWords
+    maxUploadMb: maxUploadMb
+    defaultLanguage: defaultLanguage
+    healthCheckPath: healthCheckPath
   }
+  dependsOn: [
+    rg
+  ]
 }
 
-@description('Key Vault para claves que se necesiten fuera de Azure.')
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: keyVaultName
-  location: location
-  properties: {
-    sku: { family: 'A', name: 'standard' }
-    tenantId: subscription().tenantId
-    enableSoftDelete: true
-    enableRbacAuthorization: true
-    publicNetworkAccess: 'Enabled'
-  }
-}
+// ============================================================================
+// Salidas
+// ============================================================================
 
-/* ------------------------------------------------------------------ aplicación */
+@description('URL pública de la aplicación.')
+output appUrl string = services.outputs.appUrl
 
-@description('Plan de App Service para el backend FastAPI.')
-resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
-  name: planName
-  location: location
-  sku: { name: appServicePlanSku }
-  kind: 'linux'
-  properties: { reserved: true }
-}
-
-@description('App Service (Linux, Python) con identidad administrada.')
-resource app 'Microsoft.Web/sites@2023-12-01' = {
-  name: appName
-  location: location
-  kind: 'app,linux'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: { '${identity.id}': {} }
-  }
-  properties: {
-    serverFarmId: plan.id
-    httpsOnly: true
-    siteConfig: {
-      linuxFxVersion: 'Python|${pythonVersion}'
-      // Always On no existe en el plan gratuito (F1): se desactiva en ese caso.
-      alwaysOn: !equals(appServicePlanSku, 'F1')
-      minTlsVersion: '1.2'
-      ftpsState: 'Disabled'
-      http20Enabled: true
-    }
-  }
-}
-
-@description('Configuración de la aplicación (prefijo LECTURA_).')
-resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
-  parent: app
-  name: 'appsettings'
-  properties: {
-    LECTURA_ENVIRONMENT: 'prod'
-    LECTURA_LOG_LEVEL: 'INFO'
-    LECTURA_OCR_PROVIDER: 'vision'
-    LECTURA_VISION_ENDPOINT: 'https://${visionName}.cognitiveservices.azure.com/'
-    LECTURA_BLOB_SERVICE_URL: 'https://${blobAccountName}.blob.core.windows.net/'
-    LECTURA_BLOB_CONTAINER: containerName
-    LECTURA_SPEECH_REGION: speechRegion
-    LECTURA_DEFAULT_LANGUAGE: 'es'
-    LECTURA_DEFAULT_MAX_WORDS: '12'
-    LECTURA_MAX_UPLOAD_MB: '12'
-    LECTURA_MATCH_THRESHOLD: '0.8'
-    AZURE_CLIENT_ID: identity.properties.clientId
-  }
-}
-
-/* -------------------------------------------------------------------- permisos */
-
-@description('Rol de Cognitive Services sobre todo el grupo de recursos (Vision y Speech).')
-resource cognitiveRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(vision.id, identity.id, 'Cognitive Services User')
-  scope: resourceGroup()
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      'a97b65f3-24c7-4388-baec-2e87135dc908'
-    )
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-@description('Rol de escritura en el almacenamiento de fichas.')
-resource storageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storage.id, identity.id, 'Storage Blob Data Contributor')
-  scope: storage
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-    )
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-@description('Rol de lectura de secretos en Key Vault.')
-resource keyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, identity.id, 'Key Vault Secrets User')
-  scope: keyVault
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      '4633458b-17de-408a-b874-0445c86b69e6'
-    )
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-/* -------------------------------------------------------------------- salidas */
+@description('Nombre del App Service.')
+output appNameOut string = services.outputs.appNameOut
 
 @description('Endpoint de Azure AI Vision (LECTURA_VISION_ENDPOINT).')
-output visionEndpoint string = 'https://${visionName}.cognitiveservices.azure.com/'
+output visionEndpointOut string = services.outputs.visionEndpointOut
 
-@description('Región de Speech (LECTURA_SPEECH_REGION).')
-output speechRegionOut string = speechRegion
+@description('Endpoint de Foundry para la traducción (LECTURA_FOUNDRY_ENDPOINT).')
+output foundryEndpointOut string = services.outputs.foundryEndpointOut
 
-@description('URL del almacenamiento usado por la aplicación.')
-output blobServiceUrl string = 'https://${blobAccountName}.blob.core.windows.net/'
+@description('URL del almacenamiento (LECTURA_BLOB_SERVICE_URL).')
+output blobServiceUrlOut string = services.outputs.blobServiceUrlOut
 
-@description('Nombre del App Service desplegado.')
-output appNameOut string = app.name
+@description('PrincipalId de la identidad administrada.')
+output identityPrincipalId string = services.outputs.identityPrincipalId
 
-@description('Nombre del contenedor de fichas.')
-output containerNameOut string = container.name
+@description('ClientId de la identidad administrada (AZURE_CLIENT_ID).')
+output identityClientId string = services.outputs.identityClientId
+
+@description('Regiones donde quedó cada cosa, por si hay que depurar.')
+output locations object = {
+  resourceGroup: location
+  storage: resourceLocation
+  vision: resourceLocation
+  appService: appServiceLocation
+  speech: enableAzureSpeech || enableSpeechServices ? speechLocation : 'no desplegado (usar voz del navegador)'
+  audioModel: enableAudioModel ? resourceLocation : 'no desplegado (usar voz del navegador)'
+}
