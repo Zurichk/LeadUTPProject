@@ -31,7 +31,7 @@ palabra con:
 | Traducción | Diccionario es⇄ca propio + modelo de Foundry como respaldo |
 | Almacenamiento | Azure Blob Storage (contenedor `fichas-lectura`) |
 | Seguridad | Managed Identity (DefaultAzureCredential) + Azure Key Vault |
-| IaC | `infra/main.bicep` (declarativo) + `infra/setup-cloud-shell.sh` (imperativo) |
+| IaC | `infra/main.bicep` + `infra/services.bicep`|
 
 El reconocimiento de voz usa primero la **Web Speech API del navegador**
 (instantáneo y sin coste) y cae a **Azure AI Speech** cuando el navegador no la
