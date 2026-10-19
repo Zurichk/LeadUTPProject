@@ -640,7 +640,12 @@
       speakButton.classList.remove("is-listening");
     };
 
-    const recognition = browserRecognition();
+    // En modo "azure" se usa siempre el reconocimiento del servidor: así el
+    // micrófono funciona igual en Firefox y Safari, y el audio no se envía a
+    // los servidores de Google. En "auto" se prueba el navegador primero
+    // porque no cuesta nada y la latencia es menor.
+    const recognition =
+      config.speechBackend === "azure" ? null : browserRecognition();
     if (!recognition) {
       finish();
       recognizeWithServer(card, word, index);

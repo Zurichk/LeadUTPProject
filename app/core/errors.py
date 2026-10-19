@@ -70,7 +70,11 @@ class ServiceError(AppError):
 
 
 def _request_language(request: Request) -> str:
-    """Resuelve el idioma de la petición (cookie, query o cabecera).
+    """Resuelve el idioma de la petición (query, cookie o idioma por defecto).
+
+    Se ignora ``Accept-Language`` a propósito, igual que en
+    :func:`app.api.dependencies.get_language`: el idioma solo cambia si el
+    usuario lo elige explícitamente.
 
     Args:
         request: Petición HTTP entrante.
@@ -84,7 +88,9 @@ def _request_language(request: Request) -> str:
     cookie_language = request.cookies.get("lang")
     if cookie_language:
         return normalize_language(cookie_language)
-    return normalize_language(request.headers.get("accept-language"))
+    container = getattr(request.app.state, "container", None)
+    configured = getattr(getattr(container, "settings", None), "default_language", None)
+    return normalize_language(configured)
 
 
 async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:

@@ -3,6 +3,8 @@
 Aplicación web interactiva para que niños de 5 años pratiquen su ficha semanal
 de lectura en **castellano** y **valenciano**.
 
+App Service desplegado: https://app-lecturafacil-mika03.azurewebsites.net/
+
 Ejemplo de recursos desplegados:
 ![Recursos desplegados en Azure](app/static/assets/images/image.png)
 

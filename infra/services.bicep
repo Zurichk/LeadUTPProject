@@ -159,6 +159,13 @@ var tags = {
   proyecto: 'lectura-facil'
 }
 
+// Si hay un recurso de voz desplegado, la app debe usarlo. Se prefiere el
+// backend "azure" sobre el valor del parámetro para que no pueda quedar
+// configurado "browser" por descuido.
+var effectiveSpeechBackend = enableAzureSpeech || enableSpeechServices
+  ? 'azure'
+  : speechBackend
+
 // ============================================================================
 // Identidad administrada (la usa la app para acceder a Azure sin claves)
 // ============================================================================
@@ -355,8 +362,10 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     LECTURA_BLOB_CONTAINER: containerName
     LECTURA_PROFILES_BLOB_NAME: 'perfiles.json'
 
-    // Voz
-    LECTURA_SPEECH_BACKEND: speechBackend
+    // Voz. Si se despliega un recurso de Speech, la app lo usa siempre: crear
+    // el recurso y dejar el backend en "browser" sería un fallo silencioso
+    // (todo desplegado y el micrófono sin usar Azure).
+    LECTURA_SPEECH_BACKEND: effectiveSpeechBackend
     LECTURA_SPEECH_KEY: ''
     LECTURA_SPEECH_VOICES__ES: 'es-ES-ElviraNeural'
     LECTURA_SPEECH_VOICES__CA: 'ca-ES-JoanaNeural'
@@ -440,6 +449,9 @@ output foundryEndpointOut string = foundryEndpoint
 
 @description('URL del almacenamiento (LECTURA_BLOB_SERVICE_URL).')
 output blobServiceUrlOut string = blobUrl
+
+@description('Nombre del recurso de voz, si se desplegó.')
+output speechResourceOut string = enableAzureSpeech ? speechName : (enableSpeechServices ? speechServicesName : 'no desplegado')
 
 @description('PrincipalId de la identidad administrada.')
 output identityPrincipalId string = identity.properties.principalId

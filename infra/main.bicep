@@ -224,6 +224,9 @@ output foundryEndpointOut string = services.outputs.foundryEndpointOut
 @description('URL del almacenamiento (LECTURA_BLOB_SERVICE_URL).')
 output blobServiceUrlOut string = services.outputs.blobServiceUrlOut
 
+@description('Nombre del recurso de voz, si se desplegó.')
+output speechResourceOut string = services.outputs.speechResourceOut
+
 @description('PrincipalId de la identidad administrada.')
 output identityPrincipalId string = services.outputs.identityPrincipalId
 

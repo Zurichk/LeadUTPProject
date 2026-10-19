@@ -106,7 +106,7 @@ def build_ssml(text: str, voice: str, locale: str) -> str:
         Documento SSML listo para enviar al servicio.
     """
     return (
-        "<speak version='1.0' xmlns='http://www.w3.org/2001/05/speechml'"
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis'"
         f" xml:lang='{escape(locale)}'>"
         f"<voice xml:lang='{escape(locale)}' name='{escape(voice)}'>"
         f"{escape(text)}"

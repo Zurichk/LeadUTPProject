@@ -37,8 +37,13 @@ def get_container(request: Request) -> ServiceContainer:
 def get_language(request: Request) -> str:
     """Resuelve el idioma de la petición.
 
-    Prioridad: parámetro ``lang`` > cookie ``lang`` > cabecera
-    ``Accept-Language``.
+    Prioridad: parámetro ``lang`` > cookie ``lang`` > idioma por defecto.
+
+    La cabecera ``Accept-Language`` se ignora a propósito: un navegador en
+    valenciano la envía como ``ca-ES`` y la app arrancaba en valenciano aunque
+    el idioma por defecto sea el castellano. El idioma solo cambia si el usuario
+    lo pide de forma explícita (con el selector, que guarda la cookie, o con
+    ``?lang=ca``).
 
     Args:
         request: Petición HTTP en curso.
@@ -52,7 +57,23 @@ def get_language(request: Request) -> str:
     cookie_language = request.cookies.get("lang")
     if cookie_language:
         return normalize_language(cookie_language)
-    return normalize_language(request.headers.get("accept-language"))
+    return _default_language(request)
+
+
+def _default_language(request: Request) -> str:
+    """Idioma por defecto configurado en la aplicación.
+
+    Args:
+        request: Petición HTTP en curso.
+
+    Returns:
+        Código de idioma de ``LECTURA_DEFAULT_LANGUAGE`` (``"es"`` si no hay
+        contenedor disponible todavía).
+    """
+    container: ServiceContainer | None = getattr(request.app.state, "container", None)
+    if container is None:
+        return normalize_language(None)
+    return normalize_language(container.settings.default_language)
 
 
 ContainerDep = Annotated[ServiceContainer, Depends(get_container)]

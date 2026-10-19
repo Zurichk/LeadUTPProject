@@ -22,6 +22,19 @@ def test_build_ssml_escapes_special_chars() -> None:
     assert ssml.startswith("<speak")
 
 
+def test_build_ssml_uses_the_official_namespace() -> None:
+    """Azure solo acepta el namespace oficial de Speech Synthesis.
+
+    Con "http://www.w3.org/2001/05/speechml" el servicio devuelve 400 y la app
+    lo convertía en un 502 tts_error. El error no lo detectaban los tests
+    porque la llamada HTTP estaba simulada: este test fija el valor correcto.
+    """
+    ssml = build_ssml("hola", "es-ES-ElviraNeural", "es-ES")
+
+    assert "http://www.w3.org/2001/10/synthesis" in ssml
+    assert "speechml" not in ssml
+
+
 def test_parse_recognition_success() -> None:
     """Se toma la mejor hipótesis de la respuesta correcta."""
     result = _parse_recognition(

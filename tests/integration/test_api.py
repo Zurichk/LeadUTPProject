@@ -87,6 +87,32 @@ def test_home_renders_in_valencian(client: TestClient) -> None:
     assert "Anem a llegir junts" in response.text
 
 
+def test_home_defaults_to_spanish_even_with_a_catalan_browser(
+    client: TestClient,
+) -> None:
+    """Un navegador en valenciano no cambia el idioma por defecto.
+
+    Antes se leía ``Accept-Language``, así que un navegador con ``ca-ES``
+    abría la app en valenciano aunque el idioma por defecto fuese castellano.
+    El idioma solo debe cambiar con el selector (cookie) o con ``?lang=``.
+    """
+    response = client.get("/", headers={"Accept-Language": "ca-ES,ca;q=0.9"})
+
+    assert response.status_code == 200
+    assert 'lang="es"' in response.text
+    assert "Vamos a leer juntos" in response.text
+
+
+def test_cookie_still_overrides_the_default_language(client: TestClient) -> None:
+    """La elección explícita del usuario (cookie) se respeta."""
+    client.cookies.set("lang", "ca")
+
+    response = client.get("/", headers={"Accept-Language": "es-ES,es;q=0.9"})
+
+    assert response.status_code == 200
+    assert 'lang="ca"' in response.text
+
+
 def test_home_exposes_the_voice_backend(client: TestClient) -> None:
     """La interfaz conoce qué motor de voz debe usar."""
     response = client.get("/")
