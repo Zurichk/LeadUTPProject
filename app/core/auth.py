@@ -41,18 +41,22 @@ class CognitiveAuth:
     async def headers(self) -> dict[str, str]:
         """Devuelve la cabecera de autorización para una llamada a Azure AI.
 
+        Si hay clave estática configurada se usa directamente: es lo que ocurre
+        en desarrollo local, donde no hay identidad administrada. En Azure solo
+        se configura la identidad, así que se pide un token de Entra ID.
+
         Returns:
-            Cabeceras con ``Authorization: Bearer`` o
-            ``Ocp-Apim-Subscription-Key``.
+            Cabeceras con ``Ocp-Apim-Subscription-Key`` o
+            ``Authorization: Bearer``.
 
         Raises:
-            ConfigurationError: Si no hay credenciales configuradas.
+            ConfigurationError: Si no hay ni credenciales ni clave disponible.
         """
+        if self._subscription_key:
+            return {"Ocp-Apim-Subscription-Key": self._subscription_key}
         if self._credential is not None:
             token = await self._credential.get_token(AZURE_COGNITIVE_SCOPE)
             return {"Authorization": f"Bearer {token.token}"}
-        if self._subscription_key:
-            return {"Ocp-Apim-Subscription-Key": self._subscription_key}
         raise ConfigurationError(
             "error.not_configured",
             status_code=503,

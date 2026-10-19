@@ -145,3 +145,33 @@ async def test_auth_requires_credentials() -> None:
         await auth.headers()
 
     assert error.value.code == "azure_identity_missing"
+
+
+async def test_static_key_takes_precedence_over_credential() -> None:
+    """En local gana la clave estática: la identidad puede no existir.
+
+    Es el caso real de un portátil sin Azure CLI ni Managed Identity, donde
+    ``DefaultAzureCredential`` se construye pero falla al pedir token.
+    """
+
+    class FailingCredential:
+        """Credencial que siempre falla, como ocurre en local sin identidad."""
+
+        async def get_token(self, *scopes: str, **kwargs: object) -> str:
+            """Falla siempre.
+
+            Args:
+                *scopes: Ámbitos solicitados.
+                **kwargs: Parámetros adicionales.
+
+            Raises:
+                RuntimeError: Siempre.
+            """
+            raise RuntimeError("no hay identidad disponible")
+
+    auth = CognitiveAuth(
+        credential=FailingCredential(),  # type: ignore[arg-type]
+        subscription_key="clave-estatica",
+    )
+
+    assert await auth.headers() == {"Ocp-Apim-Subscription-Key": "clave-estatica"}

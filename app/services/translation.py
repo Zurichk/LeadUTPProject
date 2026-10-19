@@ -27,6 +27,7 @@ import httpx
 from app.core.auth import CognitiveAuth
 from app.core.errors import ServiceError
 from app.core.i18n import normalize_language
+from app.services.dictionary import lookup
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,128 @@ class FoundryTranslationService:
                 "error.generic", status_code=502, code="translation_unparsable"
             )
         return translations
+
+
+def is_plausible_translation(value: str) -> bool:
+    """Indica si la respuesta del modelo parece una traducción real.
+
+    Los modelos pequeños a veces responden con una frase entera o con
+    explicaciones ("sustantivo", "el castellano es una lengua…"). Enseñar eso
+    a una niña que está aprendiendo a leer sería peor que no traducir, así que
+    solo se aceptan respuestas cortas y limpias.
+
+    Args:
+        value: Texto devuelto por el modelo.
+
+    Returns:
+        ``True`` si parece una traducción utilizable.
+    """
+    cleaned = value.strip().strip("\"'“” .")
+    if not cleaned or len(cleaned) > 24:
+        return False
+    if any(char in cleaned for char in "{}[]\n:"):
+        return False
+    words = cleaned.split()
+    return 1 <= len(words) <= 3
+
+
+class HybridTranslationService:
+    """Traduce con diccionario propio y recurre al modelo solo si hace falta.
+
+    El diccionario cubre el vocabulario habitual de las fichas de lectura, así
+    que la mayoría de las palabras se traducen de forma determinista, gratis e
+    instantánea. Solo las palabras desconocidas llegan al modelo, y su
+    respuesta se valida antes de mostrarse.
+
+    Args:
+        model: Modelo de lenguaje opcional como respaldo.
+        cache_size: Número máximo de traducciones del modelo en memoria.
+    """
+
+    def __init__(
+        self,
+        model: TranslationPort | None = None,
+        cache_size: int = 512,
+    ) -> None:
+        self._model = model
+        self._cache_size = cache_size
+        self._cache: dict[tuple[str, str], str] = {}
+        # Palabras que el modelo no sabe traducir: se recuerdan para no
+        # volver a preguntar en cada petición (una llamada al modelo puede
+        # tardar 25 s y el resultado tampoco cambiaba).
+        self._untranslatable: set[tuple[str, str]] = set()
+
+    async def translate(
+        self,
+        words: list[str],
+        source_language: str,
+        target_language: str,
+    ) -> TranslationResult:
+        """Traduce las palabras usando el diccionario y, si hace falta, el modelo.
+
+        Args:
+            words: Palabras de la ficha.
+            source_language: Idioma de partida.
+            target_language: Idioma de destino.
+
+        Returns:
+            Pares (original, traducción). Las palabras sin traducción fiable
+            se devuelven tal cual, sin marcar.
+        """
+        if not words:
+            return TranslationResult(pairs=())
+        target = normalize_language(target_language)
+        resolved: dict[str, str] = {}
+        pending: list[str] = []
+
+        for word in words:
+            cached = self._cache.get((word, target))
+            if cached:
+                resolved[word] = cached
+                continue
+            if (word, target) in self._untranslatable:
+                continue
+            known = lookup(word, target)
+            if known:
+                resolved[word] = known
+            else:
+                pending.append(word)
+
+        if pending and self._model is not None:
+            try:
+                result = await self._model.translate(pending, source_language, target)
+            except ServiceError:
+                logger.info(
+                    "El modelo no pudo traducir %d palabras; se mantienen",
+                    len(pending),
+                )
+                result = TranslationResult(pairs=())
+
+            # Guarda contra el modelo: si devuelve SIEMPRE la misma palabra
+            # para varias palabras distintas está devolviendo basura (se ha
+            # observado que responde "sustantivo" a todo). Se descarta todo.
+            values = [translated for _, translated in result.pairs]
+            if len(values) > 1 and len(set(values)) == 1:
+                logger.info("Traducción descartada: el modelo repitió %r", values[0])
+                result = TranslationResult(pairs=())
+
+            for original, translated in result.pairs:
+                if not is_plausible_translation(translated):
+                    logger.info("Traducción descartada: %r", translated)
+                    continue
+                resolved[original] = translated
+                self._cache[(original, target)] = translated
+                while len(self._cache) > max(self._cache_size, 0):
+                    self._cache.pop(next(iter(self._cache)))
+
+            # Lo que el modelo no resolvió se marca como no traducible para
+            # no repetir una llamada lenta en cada petición.
+            for word in pending:
+                if word not in resolved:
+                    self._untranslatable.add((word, target))
+
+        pairs = tuple((word, resolved.get(word, word)) for word in words)
+        return TranslationResult(pairs=pairs)
 
 
 class UnavailableTranslationService:

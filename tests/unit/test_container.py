@@ -6,7 +6,7 @@ import pytest
 
 from app.container import build_container
 from app.core.config import Settings
-from app.core.errors import ConfigurationError, ServiceError
+from app.core.errors import ConfigurationError
 
 
 async def test_container_accepts_static_keys_for_local_development() -> None:
@@ -50,14 +50,12 @@ async def test_ocr_is_unavailable_without_configuration() -> None:
         await container.http_client.aclose()
 
 
-async def test_translation_is_unavailable_without_configuration() -> None:
-    """Sin Foundry configurado, la traducción indica que no está disponible."""
+async def test_translation_works_with_the_dictionary_only() -> None:
+    """Sin Foundry configurado, el diccionario propio sigue traduciendo."""
     container = await build_container(Settings(translation_enabled=False))
     try:
-        with pytest.raises(ServiceError) as error:
-            await container.translation.translate(["casa"], "es", "ca")
+        result = await container.translation.translate(["perro"], "es", "ca")
     finally:
         await container.http_client.aclose()
 
-    assert error.value.code == "translation_not_configured"
-    assert error.value.status_code == 503
+    assert result.pairs == (("perro", "gos"),)

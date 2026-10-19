@@ -28,6 +28,12 @@ dist/
 .coverage
 htmlcov/
 
+# Imágenes de prueba generadas por scripts/generar_ficha_prueba.py
+test/
+dist/
+dist.zip
+*.zip
+
 
 docs/
 requirements-dev.txt

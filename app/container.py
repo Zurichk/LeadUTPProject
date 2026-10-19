@@ -31,8 +31,8 @@ from app.services.storage import (
 )
 from app.services.translation import (
     FoundryTranslationService,
+    HybridTranslationService,
     TranslationPort,
-    UnavailableTranslationService,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,9 +134,9 @@ async def build_container(settings: Settings) -> ServiceContainer:
         else AzureSpeechService(settings, auth, http_client)
     )
 
-    translation: TranslationPort = UnavailableTranslationService()
+    model_translator: TranslationPort | None = None
     if settings.translation_configured and settings.foundry_endpoint:
-        translation = FoundryTranslationService(
+        model_translator = FoundryTranslationService(
             endpoint=settings.foundry_endpoint,
             deployment=settings.foundry_deployment,
             auth=auth,
@@ -146,10 +146,16 @@ async def build_container(settings: Settings) -> ServiceContainer:
             cache_size=settings.translation_cache_size,
         )
         logger.info(
-            "Traducción activada con %s (%s)",
+            "Traducción con modelo: %s (%s)",
             settings.foundry_deployment,
             settings.foundry_endpoint,
         )
+    # El diccionario propio es siempre el camino preferente; el modelo solo
+    # interviene para las palabras que el diccionario no conoce.
+    translation: TranslationPort = HybridTranslationService(
+        model=model_translator,
+        cache_size=settings.translation_cache_size,
+    )
 
     return ServiceContainer(
         settings=settings,

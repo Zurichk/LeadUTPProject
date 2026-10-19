@@ -23,16 +23,24 @@ palabra con:
 |---|---|
 | Interfaz | HTML5 + CSS + JavaScript (sin CDN, todo local) |
 | Backend | FastAPI (Python 3.11+) |
-| Cómputo | Azure App Service (Linux, Python 3.12) |
+| Cómputo | Azure App Service (Linux, Python 3.12) — o túnel local |
 | OCR | Azure AI Vision (Read 4.0) o Azure AI Document Intelligence |
-| Voz | Azure AI Speech Service (`es-ES`, `ca-ES`) |
+| Voz | Navegador (Web Speech API) · Azure AI Speech si está disponible |
+| Traducción | Diccionario es⇄ca propio + modelo de Foundry como respaldo |
 | Almacenamiento | Azure Blob Storage (contenedor `fichas-lectura`) |
 | Seguridad | Managed Identity (DefaultAzureCredential) + Azure Key Vault |
-| IaC | Bicep (`infra/main.bicep`) |
+| IaC | Bicep (`infra/main.bicep`) + `infra/setup-cloud-shell.sh` |
 
 El reconocimiento de voz usa primero la **Web Speech API del navegador**
 (instantáneo y sin coste) y cae a **Azure AI Speech** cuando el navegador no la
 soporta (Safari/Firefox), enviando audio WAV PCM 16 kHz.
+
+La **traducción es híbrido**: un diccionario propio de ~300 palabras de uso
+infantil resuelve el caso habitual de forma instantánea y determinista, y solo
+las palabras desconocidas llegan al modelo de Foundry (con validación de su
+respuesta: si no parece una traducción, se descarta). Motivo: los modelos
+pequeños disponibles devolvían traducciones erróneas —peor que no traducir—
+en una app donde se está aprendiendo a leer.
 
 ---
 
@@ -52,20 +60,24 @@ soporta (Safari/Firefox), enviando audio WAV PCM 16 kHz.
 │   ├── core/                    # config, errores, i18n, auth, media, logging
 │   ├── api/
 │   │   ├── dependencies.py      # Inyección de dependencias
-│   │   └── routes/              # pages, sheets, speech, profiles
+│   │   └── routes/              # pages, sheets, speech, profiles, translation
 │   ├── schemas/                 # DTOs Pydantic v2
 │   ├── services/
 │   │   ├── ocr/                 # Puertos + proveedores Azure + extracción
 │   │   ├── speech.py            # TTS + STT
 │   │   ├── storage.py           # Blob Storage (+ memoria)
 │   │   ├── profiles.py          # Perfiles sin contraseña
-│   │   ├── translation.py       # Traducción con Azure AI Foundry (opcional)
+│   │   ├── dictionary.py        # Diccionario es⇄ca de vocabulario infantil
+│   │   ├── translation.py       # Traducción híbrida (diccionario + Foundry)
 │   │   └── evaluation.py        # Lógica de evaluación
 │   ├── static/
 │   │   ├── css/kids.css         # Estilo infantil y responsive
 │   │   └── js/{app,recorder}.js # Interfaz + grabación WAV
 │   └── templates/               # Jinja2 (base.html, index.html)
+├── scripts/
+│   └── generar_ficha_prueba.py  # Genera una imagen con texto para probar el OCR
 ├── tests/                       # unit/ + integration/
+├── infra/                       # Bicep + script de Cloud Shell
 ├── requirements.txt
 ├── requirements-dev.txt
 └── pyproject.toml

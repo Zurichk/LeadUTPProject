@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,12 +12,12 @@ class OcrWord:
     Attributes:
         text: Texto reconocido (sin normalizar).
         confidence: Confianza del motor entre 0 y 1.
-        bbox: Casilla envolvente en coordenadas normalizadas de la página.
+        bbox: Polígono envolvente como pares de coordenadas ``(x, y)``.
     """
 
     text: str
     confidence: float = 0.0
-    bbox: tuple[float, ...] = field(default=())
+    bbox: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -49,28 +49,45 @@ def make_client(handler: Handler) -> httpx.AsyncClient:
 
 
 async def test_vision_reads_words() -> None:
-    """Se extraen las palabras de la respuesta de Vision."""
+    """Se extraen las palabras de la respuesta real de Azure AI Vision.
+
+    La estructura devuelta por el servicio es ``readResult.blocks[].lines[]
+    .words[]`` (sin nivel ``pages``), con ``boundingPolygon`` como lista de
+    objetos ``{"x": .., "y": ..}``. Replica una respuesta capturada del
+    servicio real para no volver a asumir una forma equivocada.
+    """
     payload = {
-        "analyzeResult": {
-            "readResult": {
-                "pages": [
-                    {
-                        "blocks": [
-                            {
-                                "lines": [
-                                    {
-                                        "words": [
-                                            {"text": "Mika", "confidence": 0.98},
-                                            {"text": "gos", "confidence": 0.9},
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            }
-        }
+        "modelVersion": "2023-10-01",
+        "metadata": {"width": 1000, "height": 2300},
+        "readResult": {
+            "blocks": [
+                {
+                    "lines": [
+                        {
+                            "text": "Mika gos",
+                            "words": [
+                                {
+                                    "text": "Mika",
+                                    "confidence": 0.998,
+                                    "boundingPolygon": [
+                                        {"x": 57, "y": 49},
+                                        {"x": 139, "y": 50},
+                                    ],
+                                },
+                                {
+                                    "text": "gos",
+                                    "confidence": 0.987,
+                                    "boundingPolygon": [
+                                        {"x": 180, "y": 49},
+                                        {"x": 260, "y": 50},
+                                    ],
+                                },
+                            ],
+                        }
+                    ]
+                }
+            ]
+        },
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -83,7 +100,35 @@ async def test_vision_reads_words() -> None:
 
     assert result.provider == "vision"
     assert [word.text for word in result.words] == ["Mika", "gos"]
-    assert result.average_confidence > 0.9
+    assert result.words[0].bbox == ((57.0, 49.0), (139.0, 50.0))
+    assert result.average_confidence > 0.98
+
+
+async def test_vision_reads_nested_pages_shape() -> None:
+    """También se admite la variante con ``analyzeResult.readResult.pages``."""
+    payload = {
+        "analyzeResult": {
+            "readResult": {
+                "pages": [
+                    {
+                        "blocks": [
+                            {
+                                "lines": [
+                                    {"words": [{"text": "flor", "confidence": 0.9}]}
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+
+    async with make_client(lambda request: httpx.Response(200, json=payload)) as client:
+        ocr = AzureVisionReadOcr("https://vision.example", KeyAuth(), client)
+        result = await ocr.read_image(b"image", filename="ficha.jpg")
+
+    assert [word.text for word in result.words] == ["flor"]
 
 
 async def test_vision_service_error() -> None:

@@ -15,7 +15,10 @@ httpx>=0.27,<1.0
 azure-identity>=1.19,<2.0
 
 # Almacenamiento de las fotos de las fichas y de los perfiles.
-# El extra [aiohttp] es OBLIGATORIO: sin él, BlobServiceClient en modo asíncrono
-# falla con "Unable to create async transport. Please check aiohttp is installed".
-azure-storage-blob[aiohttp]>=12.22,<13.0
+azure-storage-blob>=12.22,<13.0
 azure-core>=1.31,<2.0
+
+# OBLIGATORIO para el cliente asíncrono de Blob Storage: sin él, Azure lanza
+# "ImportError: Unable to create async transport. Please check aiohttp is
+# installed" en el primer acceso al contenedor.
+aiohttp>=3.9

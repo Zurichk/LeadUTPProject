@@ -31,6 +31,11 @@ from app.services.speech import (  # noqa: E402
 from app.services.storage import InMemoryStorageService  # noqa: E402
 from app.services.translation import TranslationResult  # noqa: E402
 
+# Las pruebas NUNCA deben leer el archivo .env del desarrollador: contiene
+# secretos y valores reales de Azure, y haría que los tests dependieran de tu
+# entorno local. Se anula a nivel de clase para toda la sesión.
+Settings.model_config["env_file"] = None
+
 FAKE_SHEET_TEXT = "Mika té un gos rosa que es diu Nube i juga al parc"
 
 

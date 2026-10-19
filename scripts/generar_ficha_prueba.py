@@ -15,7 +15,19 @@ from pathlib import Path
 
 TEXTS: dict[str, list[str]] = {
     "es": ["Mika", "tiene", "un", "perro", "rosa", "que", "se", "llama", "Nube"],
-    "ca": ["La", "gota", "dels", "gos", "menuda", "hui", "al", "parc", "amb", "el", "sol"],
+    "ca": [
+        "La",
+        "gota",
+        "dels",
+        "gos",
+        "menuda",
+        "hui",
+        "al",
+        "parc",
+        "amb",
+        "el",
+        "sol",
+    ],
 }
 
 
@@ -35,9 +47,7 @@ def render(words: list[str], destination: Path) -> Path:
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError as exc:  # pragma: no cover - depende del entorno
-        raise RuntimeError(
-            "Necesitas Pillow: pip install Pillow"
-        ) from exc
+        raise RuntimeError("Necesitas Pillow: pip install Pillow") from exc
 
     width, height = 1000, 200 * len(words) + 100
     image = Image.new("RGB", (width, height), "white")

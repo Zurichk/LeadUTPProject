@@ -139,7 +139,7 @@ class Settings(BaseSettings):
     foundry_endpoint: str | None = None
     foundry_deployment: str = "Phi-4-mini-instruct"
     foundry_api_key: str | None = None
-    foundry_timeout_seconds: float = Field(default=25.0, gt=0)
+    foundry_timeout_seconds: float = Field(default=12.0, gt=0)
     translation_cache_size: int = Field(default=512, ge=0)
 
     speech_region: str = "westeurope"

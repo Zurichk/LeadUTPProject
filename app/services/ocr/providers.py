@@ -23,6 +23,79 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 POLL_INTERVAL_SECONDS = 1.5
 
 
+def _normalize_polygon(polygon: object) -> tuple[tuple[float, float], ...]:
+    """Normaliza el polígono de una palabra a pares de coordenadas.
+
+    Acepta los dos formatos que usan los servicios:
+
+    * Azure AI Vision: lista de objetos ``{"x": .., "y": ..}``.
+    * Document Intelligence: lista plana de números ``[x1, y1, x2, y2, ...]``.
+
+    Args:
+        polygon: Polígono tal y como llega en la respuesta.
+
+    Returns:
+        Tupla de pares ``(x, y)``; vacía si el formato no se reconoce.
+    """
+    if not isinstance(polygon, list):
+        return ()
+    if polygon and isinstance(polygon[0], dict):
+        points: list[tuple[float, float]] = []
+        for point in polygon:
+            if isinstance(point, dict) and "x" in point and "y" in point:
+                points.append((float(point["x"]), float(point["y"])))
+        return tuple(points)
+    numbers = [float(value) for value in polygon if isinstance(value, int | float)]
+    return tuple(zip(numbers[::2], numbers[1::2], strict=False))
+
+
+def _blocks_from(read_result: dict[str, Any]) -> list[Any]:
+    """Obtiene los bloques de texto de un ``readResult``.
+
+    Azure AI Vision devuelve ``readResult.blocks`` directamente, mientras que
+    otras versiones del mismo servicio lo envuelven en
+    ``analyzeResult.readResult.pages[].blocks``. Se admiten ambos.
+
+    Args:
+        read_result: Objeto ``readResult`` de la respuesta.
+
+    Returns:
+        Lista de bloques de texto (puede estar vacía).
+    """
+    blocks = read_result.get("blocks")
+    if isinstance(blocks, list):
+        return blocks
+    collected: list[Any] = []
+    pages = read_result.get("pages")
+    if isinstance(pages, list):
+        for page in pages:
+            if isinstance(page, dict) and isinstance(page.get("blocks"), list):
+                collected.extend(page["blocks"])
+    return collected
+
+
+def _vision_read_result(payload: dict[str, Any]) -> dict[str, Any]:
+    """Localiza el objeto ``readResult`` en la respuesta de Azure AI Vision.
+
+    Args:
+        payload: Cuerpo JSON devuelto por el servicio.
+
+    Returns:
+        Objeto ``readResult`` (vacío si no se encuentra).
+    """
+    if not isinstance(payload, dict):
+        return {}
+    direct = payload.get("readResult")
+    if isinstance(direct, dict):
+        return direct
+    nested = payload.get("analyzeResult")
+    if isinstance(nested, dict):
+        inner = nested.get("readResult")
+        if isinstance(inner, dict):
+            return inner
+    return {}
+
+
 def _parse_vision_words(payload: dict[str, Any]) -> list[OcrWord]:
     """Extrae las palabras de la respuesta de Azure AI Vision (Read 4.0).
 
@@ -33,24 +106,24 @@ def _parse_vision_words(payload: dict[str, Any]) -> list[OcrWord]:
         Lista de palabras con su confianza y posición.
     """
     words: list[OcrWord] = []
-    read_result = (
-        payload.get("analyzeResult", {}).get("readResult", {})
-        if isinstance(payload, dict)
-        else {}
-    )
-    for page in read_result.get("pages", []) or []:
-        for block in page.get("blocks", []) or []:
-            for line in block.get("lines", []) or []:
-                for word in line.get("words", []) or []:
-                    text = str(word.get("text", "")).strip()
-                    if text:
-                        words.append(
-                            OcrWord(
-                                text=text,
-                                confidence=float(word.get("confidence", 0.0)),
-                                bbox=tuple(word.get("boundingBox", []) or ()),
-                            )
+    for block in _blocks_from(_vision_read_result(payload)):
+        if not isinstance(block, dict):
+            continue
+        for line in block.get("lines", []) or []:
+            if not isinstance(line, dict):
+                continue
+            for word in line.get("words", []) or []:
+                if not isinstance(word, dict):
+                    continue
+                text = str(word.get("text", "")).strip()
+                if text:
+                    words.append(
+                        OcrWord(
+                            text=text,
+                            confidence=float(word.get("confidence", 0.0)),
+                            bbox=_normalize_polygon(word.get("boundingPolygon")),
                         )
+                    )
     return words
 
 
@@ -76,7 +149,7 @@ def _parse_document_intelligence_words(payload: dict[str, Any]) -> list[OcrWord]
                         OcrWord(
                             text=text,
                             confidence=float(word.get("confidence", 0.0)),
-                            bbox=tuple(word.get("polygon", []) or ()),
+                            bbox=_normalize_polygon(word.get("polygon")),
                         )
                     )
     return words

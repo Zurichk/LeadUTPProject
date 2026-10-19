@@ -27,6 +27,57 @@ def test_home_renders_kids_interface(client: TestClient) -> None:
     assert "/static/css/kids.css" in response.text
 
 
+def test_health_reports_the_services(client: TestClient) -> None:
+    """El sondeo de salud responde e informa sin revelar secretos."""
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["app"] == "LecturaFácil"
+    assert set(payload["services"]) == {
+        "ocr",
+        "storage",
+        "speech",
+        "translation",
+        "demo_mode",
+    }
+
+
+def test_health_alias_under_api(client: TestClient) -> None:
+    """También existe /api/health para sondeos que usan ese prefijo."""
+    assert client.get("/api/health").status_code == 200
+
+
+def test_recognize_speech_reports_503_when_voice_is_browser_only() -> None:
+    """Sin Azure Speech el reconocimiento del servidor responde 503."""
+    settings = Settings(speech_backend="browser")
+    storage = InMemoryStorageService()
+    container = ServiceContainer(
+        settings=settings,
+        ocr=FakeOcr(),
+        speech=UnavailableSpeechService(),
+        storage=storage,
+        profiles=ProfileService(storage, settings.profiles_blob_name),
+        translation=UnavailableTranslationService(),
+        http_client=httpx.AsyncClient(),
+    )
+
+    async def builder(_: Settings) -> ServiceContainer:
+        return container
+
+    app = create_app(settings, container_builder=builder)
+    with TestClient(app) as browser_client:
+        response = browser_client.post(
+            "/api/recognize-speech",
+            files={"file": ("audio.wav", b"RIFF-fake", "audio/wav")},
+            data={"language": "es"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "speech_not_configured"
+
+
 def test_home_renders_in_valencian(client: TestClient) -> None:
     """Con ``?lang=ca`` la interfaz se muestra en valenciano."""
     response = client.get("/", params={"lang": "ca"})

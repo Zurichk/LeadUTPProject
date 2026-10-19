@@ -24,14 +24,14 @@ param projectName string = 'lecturafacil'
 @description('Sufijo corto y único para los nombres globales (recursos de IA).')
 param uniqueSuffix string
 
-@description('Región de los recursos.')
-param location string = 'westus2'
+@description('Región de los recursos nuevos (App Service y Key Vault).')
+param location string = 'swedencentral'
 
 @description('Región de Azure AI Speech.')
 param speechRegion string = 'westus2'
 
-@description('SKU del plan de App Service.')
-param appServicePlanSku string = 'B1'
+@description('SKU del plan de App Service. F1 es el único disponible en Azure for Students.')
+param appServicePlanSku string = 'F1'
 
 @description('Runtime de Python del App Service.')
 param pythonVersion string = '3.12'
@@ -135,7 +135,8 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'Python|${pythonVersion}'
-      alwaysOn: true
+      // Always On no existe en el plan gratuito (F1): se desactiva en ese caso.
+      alwaysOn: !equals(appServicePlanSku, 'F1')
       minTlsVersion: '1.2'
       ftpsState: 'Disabled'
       http20Enabled: true
